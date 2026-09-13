@@ -1,0 +1,118 @@
+plugins {
+    id 'net.neoforged.moddev.legacyforge'
+}
+
+base {
+    archivesName = 'cfx-compat-create'
+}
+
+def isRelease = project.hasProperty('release')
+def modArtifactVersion = (isRelease || !build_id) ? mod_version : "${mod_version}.${build_id}"
+version = "${modArtifactVersion}-mc${minecraft_version}-forge"
+group = maven_group
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version as int)
+}
+
+mixin {
+    add sourceSets.main, 'cfx_compat_create.refmap.json'
+    config 'cfx-compat-create.mixins.json'
+}
+
+legacyForge {
+    version = "${minecraft_version}-${forge_version}"
+
+    runs {
+        client {
+            client()
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+// The shared bridge lives in common/; tests sit beside the loader but exercise that shared
+// code, so they reuse main's output instead of recompiling common/.
+sourceSets {
+    main {
+        java.srcDir(rootProject.file('common/src/main/java'))
+    }
+    test {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+    maven { url 'https://cursemaven.com' }
+    // Create publishes upstream (Forge/NeoForge) artifacts here.
+    maven {
+        name = 'Createmod'
+        url = 'https://maven.createmod.net'
+    }
+}
+
+dependencies {
+    // ControlFlex API (plain Java, loader-agnostic), resolved from JitPack.
+    compileOnly "com.github.ControlFlexMC:control-flex-api:${controlflex_api_version}"
+    // Create 6.0.8 for Minecraft 1.20.1 Forge (upstream Creators-of-Create build).
+    // https://maven.createmod.net/com/simibubi/create/create-1.20.1/
+    compileOnly "com.simibubi.create:create-${minecraft_version}:${create_version}:slim"
+    compileOnly 'org.jetbrains:annotations:24.0.1'
+
+    annotationProcessor "org.spongepowered:mixin:${mixin_processor_version}:processor"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+}
+
+processResources {
+    def expandProps = [
+        'mod_id'                   : mod_id,
+        'mod_name'                 : mod_name,
+        'mod_version'              : mod_version,
+        'mod_authors'              : mod_authors,
+        'mod_license'              : mod_license,
+        'mod_description'          : mod_description,
+        'minecraft_version'        : minecraft_version,
+        'minecraft_version_range'  : minecraft_version_range,
+        'forge_version'            : forge_version,
+        'forge_version_range'      : forge_version_range,
+        'loader_version_range'     : loader_version_range,
+        'controlflex_mod_id'       : controlflex_mod_id,
+        'create_mod_id'            : create_mod_id,
+        'controlflex_version_range': controlflex_version_range,
+        'create_version_range'     : create_version_range,
+    ]
+
+    filesMatching(['pack.mcmeta', 'META-INF/mods.toml', '*.mixins.json']) {
+        expand expandProps
+    }
+
+    inputs.properties(expandProps)
+}
+
+jar {
+    manifest {
+        attributes([
+            'MixinConfigs': 'cfx-compat-create.mixins.json'
+        ])
+    }
+
+    from(rootProject.file('LICENSE')) { rename { "${it}_${mod_id}" } }
+    finalizedBy 'reobfJar'
+}

@@ -1,0 +1,31 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven {
+            name = 'MinecraftForge'
+            url = 'https://maven.minecraftforge.net/'
+        }
+        maven {
+            name = 'SpongePowered'
+            url = 'https://repo.spongepowered.org/repository/maven-public/'
+        }
+        maven {
+            name = 'FabricMC'
+            url = 'https://maven.fabricmc.net/'
+        }
+    }
+
+    plugins {
+        id 'net.neoforged.moddev.legacyforge' version '2.0.141'
+        id 'fabric-loom' version '1.6-SNAPSHOT'
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
+// This branch (1.20.1) has the two 1.20.1 loaders only; MC 1.21.1 (NeoForge) lives on the 1.21.1 branch.
+include 'forge', 'fabric'
+
+rootProject.name = 'cfx-compat-create'

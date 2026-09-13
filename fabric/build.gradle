@@ -1,0 +1,131 @@
+plugins {
+    id 'fabric-loom'
+}
+
+base {
+    archivesName = 'cfx-compat-create'
+}
+
+def isRelease = project.hasProperty('release')
+def modArtifactVersion = (isRelease || !build_id) ? mod_version : "${mod_version}.${build_id}"
+version = "${modArtifactVersion}-mc${minecraft_version}-fabric"
+group = maven_group
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version as int)
+}
+
+loom {
+    mixin {
+        defaultRefmapName = 'cfx_compat_create.refmap.json'
+    }
+
+    runs {
+        client {
+            client()
+            runDir 'run-fabric'
+        }
+    }
+}
+
+// The shared bridge lives in common/; tests sit beside the loader but exercise that shared
+// code, so they reuse main's output instead of recompiling common/.
+sourceSets {
+    main {
+        java.srcDir(rootProject.file('common/src/main/java'))
+    }
+    test {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+// Create Fabric (Fabricators-of-Create fork) is a compile-only target for the shared mixin.
+// It must NOT go through Loom's mod dependency resolution: that fork is built with Loom 1.10
+// (Gradle 9, Java 25) and Loom 1.6 refuses to configure the project for it ("Mod was built
+// with a newer version of Loom"), which would also take the Forge subproject down with it.
+// A plain file dependency compiles against the same intermediate-mapped classes the mixin
+// sees at runtime, with no dependency validation.
+def createFabricJar = layout.projectDirectory.file("libs/create-fabric-${create_fabric_version}.jar")
+
+tasks.register('downloadCreateFabric') {
+    description = 'Downloads the Create Fabric jar used as a compile-only target.'
+    group = 'build setup'
+    outputs.file(createFabricJar)
+    doLast {
+        def target = createFabricJar.asFile
+        if (target.exists()) {
+            return
+        }
+        target.parentFile.mkdirs()
+        logger.lifecycle("Downloading Create Fabric ${create_fabric_version} ...")
+        new URL(create_fabric_url).withInputStream { input ->
+            target.withOutputStream { output -> output << input }
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+    // SpongePowered repo: resolves the SpongeMixin annotation processor on Fabric.
+    maven {
+        name = 'SpongePowered'
+        url = 'https://repo.spongepowered.org/repository/maven-public/'
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+
+    // ControlFlex API (plain Java, loader-agnostic), resolved from JitPack.
+    compileOnly "com.github.ControlFlexMC:control-flex-api:${controlflex_api_version}"
+    // Create Fabric - see downloadCreateFabric above.
+    compileOnly files(createFabricJar)
+    compileOnly 'org.jetbrains:annotations:24.0.1'
+
+    annotationProcessor "org.spongepowered:mixin:${mixin_processor_version}:processor"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+}
+
+tasks.named('compileJava') {
+    dependsOn 'downloadCreateFabric'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+}
+
+processResources {
+    def expandProps = [
+        'mod_id'                   : mod_id,
+        'mod_version'              : mod_version,
+        'mod_name'                 : mod_name,
+        'mod_description'          : mod_description,
+        'mod_authors'              : mod_authors,
+        'mod_license'              : mod_license,
+        'minecraft_version'        : minecraft_version,
+        'fabric_loader_version'    : fabric_loader_version,
+        'java_version'             : java_version,
+        'controlflex_version_range': controlflex_version_range,
+        'create_version_range'     : create_version_range,
+    ]
+
+    filesMatching('fabric.mod.json') {
+        expand expandProps
+    }
+
+    inputs.properties(expandProps)
+}
+
+jar {
+    from(rootProject.file('LICENSE')) { rename { "${it}_${mod_id}" } }
+}

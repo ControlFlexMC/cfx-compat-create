@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": ["${mod_authors}"],
+  "license": "${mod_license}",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.ifels.cfx.create.CfxCreateMod"]
+  },
+  "mixins": [
+    { "config": "cfx-compat-create.mixins.json", "environment": "client" }
+  ],
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}",
+    "controlflex": "${controlflex_version_range}",
+    "create": "${create_version_range}"
+  }
+}

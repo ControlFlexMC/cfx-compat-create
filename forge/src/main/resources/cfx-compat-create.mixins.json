@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.ifels.cfx.create.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "cfx_compat_create.refmap.json",
+  "client": [
+    "ControlsUtilMixin",
+    "ControlsHandlerRestoreMixin",
+    "KeyMappingBoundKeyMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
