@@ -57,11 +57,14 @@ import java.util.function.Consumer;
  * {@code java.util} types, none of which is remapped. Redirecting it also scopes the change
  * precisely, because {@code tick()} has its own, separate {@code forEach} call.
  *
- * <p>The receiver is spelled {@code java.util.List} for every target. Create 1.20.1
- * declares {@code getControls()} as {@code Vector} and dispatches {@code forEach} with
- * {@code invokevirtual}, while 1.21.1 declares {@code List} and dispatches with
- * {@code invokeinterface}. Both are JDK types, so the interface spelling resolves on both
- * and keeps this one source file shared.</p>
+ * <p>The receiver is <b>version-specific and must match the bytecode exactly</b>. Create
+ * 1.21.1 declares {@code getControls()} as {@code List} and dispatches {@code forEach}
+ * with {@code invokeinterface}, so that is the target here. The 1.20.1 branch declares
+ * {@code Vector} and dispatches with {@code invokevirtual}, and uses that spelling
+ * instead. A target naming the other version's type matches nothing and the injection
+ * fails at load, which is what this branch hit when it named {@code java.util.Vector}.</p>
+ *
+ * <p>These are the only lines that differ between the branches' shared sources.</p>
  */
 @Mixin(value = ControlsHandler.class, remap = false)
 public abstract class ControlsHandlerRestoreMixin {
