@@ -1,0 +1,139 @@
+plugins {
+    id 'net.neoforged.moddev'
+}
+
+base {
+    archivesName = 'cfx-compat-create'
+}
+
+def isRelease = project.hasProperty('release')
+def modArtifactVersion = (isRelease || !build_id) ? mod_version : "${mod_version}.${build_id}"
+version = "${modArtifactVersion}-mc${minecraft_version}-neoforge"
+group = maven_group
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version as int)
+}
+
+// Note: net.neoforged.moddev (not legacyforge) does not provide a mixin {} DSL, so the
+// SpongeMixin annotation processor is wired up manually below. Every mixin is remap = false
+// because the target is third-party code, so the generated refmap is empty and unused.
+neoForge {
+    version = neoforge_version
+
+    runs {
+        client {
+            client()
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+// The shared bridge lives in common/; tests sit beside the loader but exercise that shared
+// code, so they reuse main's output instead of recompiling common/.
+sourceSets {
+    main {
+        java.srcDir(rootProject.file('common/src/main/java'))
+    }
+    test {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+// Create is a compile-only target for the shared mixin, so it is fetched as a plain file.
+// The published POM declares com.tterrag.registrate:Registrate, which is not available in
+// any public repository (Create ships through modpack platforms), so normal dependency
+// resolution cannot succeed. The mixin only touches ControlsUtil, which needs no Registrate
+// types on the compile classpath.
+def createJar = layout.projectDirectory.file("libs/create-${minecraft_version}-${create_version}.jar")
+
+tasks.register('downloadCreate') {
+    description = 'Downloads the Create jar used as a compile-only target.'
+    group = 'build setup'
+    outputs.file(createJar)
+    doLast {
+        def target = createJar.asFile
+        if (target.exists()) {
+            return
+        }
+        target.parentFile.mkdirs()
+        logger.lifecycle("Downloading Create ${create_version} ...")
+        new URL(create_url).withInputStream { input ->
+            target.withOutputStream { output -> output << input }
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+    // SpongePowered repo: resolves the SpongeMixin annotation processor.
+    maven {
+        name = 'SpongePowered'
+        url = 'https://repo.spongepowered.org/repository/maven-public/'
+    }
+}
+
+dependencies {
+    // ControlFlex API (plain Java, loader-agnostic), resolved from JitPack.
+    compileOnly "com.github.ControlFlexMC:control-flex-api:${controlflex_api_version}"
+    // Create for Minecraft 1.21.1 - see downloadCreate above.
+    compileOnly files(createJar)
+    compileOnly 'org.jetbrains:annotations:24.0.1'
+
+    annotationProcessor "org.spongepowered:mixin:${mixin_processor_version}:processor"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    // GLFW key codes are no longer referenced by the bridge, but these keep the test
+    // classpath aligned with the other branch should the mapping rules need them again.
+    testImplementation 'org.lwjgl:lwjgl:3.3.1'
+    testImplementation 'org.lwjgl:lwjgl-glfw:3.3.1'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('compileJava') {
+    dependsOn 'downloadCreate'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+}
+
+processResources {
+    def expandProps = [
+        'mod_id'                   : mod_id,
+        'mod_name'                 : mod_name,
+        'mod_version'              : mod_version,
+        'mod_authors'              : mod_authors,
+        'mod_license'              : mod_license,
+        'mod_description'          : mod_description,
+        'minecraft_version'        : minecraft_version,
+        'minecraft_version_range'  : minecraft_version_range,
+        'neoforge_version'         : neoforge_version,
+        'neoforge_version_range'   : neoforge_version_range,
+        'loader_version_range'     : loader_version_range,
+        'java_version'             : java_version,
+        'controlflex_mod_id'       : controlflex_mod_id,
+        'create_mod_id'            : create_mod_id,
+        'controlflex_version_range': controlflex_version_range,
+        'create_version_range'     : create_version_range,
+    ]
+
+    filesMatching(['pack.mcmeta', 'META-INF/neoforge.mods.toml', '*.mixins.json']) {
+        expand expandProps
+    }
+
+    inputs.properties(expandProps)
+}
+
+jar {
+    from(rootProject.file('LICENSE')) { rename { "${it}_${mod_id}" } }
+}
